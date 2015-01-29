@@ -71,6 +71,31 @@ try:
 finally:
     sess.end()
 
+rates = {}
+for date, num, split in data:
+    trans = split.parent
+    other = split.GetOtherSplit()
+
+    val = split.GetValue()
+    price = split.GetSharePrice()
+    curr = split.account.get_currency_or_parent()
+    curr = gnc_commodity_get_nice_symbol(curr)
+
+    if other:
+        other_name = other.account.get_full_name()
+        other_curr = other.account.get_currency_or_parent()
+        other_curr = gnc_commodity_get_nice_symbol(other_curr)
+        if curr == other_curr and curr != LOCAL:
+            print('Please enter rate for transaction "%s" on %s (%s%s):' % (
+                trans.GetDescription(), date, curr, str(val)))
+            rate = raw_input()
+            try:
+                rate = Decimal(rate)
+            except ValueError:
+                print('Invalid rate!')
+                exit()
+            rates[split] = rate.quantize(SIXPLACES)
+
 expenses = defaultdict(list)
 
 print('Transactions')
@@ -81,8 +106,16 @@ for date, num, split in data:
     other = split.GetOtherSplit()
 
     val = split.GetValue()
-    price = split.GetSharePrice()
     curr = split.account.get_currency_or_parent()
+    try:
+        rate = rates[split]
+        use_local = True
+    except KeyError:
+        price = split.GetSharePrice()
+        rate = (Decimal(price.denom()) / Decimal(price.num())).quantize(SIXPLACES)
+        use_local = False
+    local = Decimal(val.num()) / Decimal(val.denom())
+    local *= -rate
 
     print('%s - %s' % (date, trans.GetDescription()))
 
@@ -90,14 +123,13 @@ for date, num, split in data:
         other_name = other.account.get_full_name()
         other_curr = other.account.get_currency_or_parent()
         foreign = other.GetValue()
-        local = val.div(price, 1000, 0).neg()
         print('\t%s %s%s' % (
             other_name,
             gnc_commodity_get_nice_symbol(other_curr),
             foreign))
         print('\t%s %s%s' % (
             split.account.get_full_name(),
-            gnc_commodity_get_nice_symbol(curr),
+            LOCAL if use_local else gnc_commodity_get_nice_symbol(curr),
             local))
 
         other_name = other_name.split('.')
@@ -109,7 +141,7 @@ for date, num, split in data:
         print('\t%s %s%s' % (
             split.account.get_full_name(),
             gnc_commodity_get_nice_symbol(curr),
-            val.div(price, 1000, 0).neg()))
+            local))
 print()
 
 print('Expenses')
@@ -122,7 +154,7 @@ for k, v in sorted(expenses.items()):
     local_group = defaultdict(Decimal)
     foreign_group = defaultdict(Decimal)
     for name, local, foreign in v:
-        local_group[name] += Decimal(local.num()) / Decimal(local.denom())
+        local_group[name] += local
         foreign_group[name] += Decimal(foreign.num()) / Decimal(foreign.denom())
 
     local_sum = Decimal()
@@ -176,8 +208,13 @@ for date, num, split in data:
     other = split.GetOtherSplit()
 
     val = split.GetValue()
-    price = split.GetSharePrice()
-    rate = (Decimal(price.denom()) / Decimal(price.num())).quantize(SIXPLACES)
+    try:
+        rate = rates[split]
+        use_local = True
+    except KeyError:
+        price = split.GetSharePrice()
+        rate = (Decimal(price.denom()) / Decimal(price.num())).quantize(SIXPLACES)
+        use_local = False
     curr = split.account.get_currency_or_parent()
 
     rows.append([date,
@@ -190,16 +227,20 @@ for date, num, split in data:
         other_curr = other.account.get_currency_or_parent()
         foreign = other.GetValue()
         other_val = gnc_commodity_get_nice_symbol(other_curr) + str(foreign)
-        local = val.div(price, 1000, 0).neg()
-        local_val = gnc_commodity_get_nice_symbol(curr) + str(local)
+        local = Decimal(val.num()) / Decimal(val.denom())
+        local *= -rate
+        local = local.quantize(TWOPLACES)
+        local_val = (LOCAL if use_local else gnc_commodity_get_nice_symbol(curr)) + str(local)
     else:
         other_name = '-'
         other_val = '-'
-        local = val.div(price, 1000, 0).neg()
+        local = Decimal(val.num()) / Decimal(val.denom())
+        local *= -rate
+        local = local.quantize(TWOPLACES)
         local_val = gnc_commodity_get_nice_symbol(curr) + str(local)
         rate = 1
 
-    balance += (Decimal(local.num()) / Decimal(local.denom())).quantize(TWOPLACES)
+    balance += local
 
     rows.append([None,
                  other_name,
@@ -237,7 +278,6 @@ for k, v in sorted(expenses.items()):
     local_group = defaultdict(Decimal)
     foreign_group = defaultdict(Decimal)
     for name, local, foreign in v:
-        local = Decimal(local.num()) / Decimal(local.denom())
         local_group[name] += local.quantize(TWOPLACES)
         foreign = Decimal(foreign.num()) / Decimal(foreign.denom())
         foreign_group[name] += foreign.quantize(TWOPLACES)

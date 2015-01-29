@@ -219,28 +219,25 @@ for k, v in sorted(expenses.items()):
 
     rows = []
     local_sum = Decimal()
-    foreign_sum = Decimal()
     for name in sorted(local_group):
         local_val = local_group[name]
         foreign_val = foreign_group[name]
 
         local_sum += local_val
-        if local_val != foreign_val:
-            foreign_sum += foreign_val
-        else:
-            foreign_val = None
 
         rows.append([name,
-                     (FOREIGN + str(foreign_val)) if foreign_val else '',
+                     (FOREIGN + str(foreign_val))
+					 if foreign_val != local_val else 'N/A',
                      LOCAL + str(local_val)])
 
     rows.append(['Total',
-                 FOREIGN + str(foreign_sum),
+                 '',
                  LOCAL + str(local_sum)])
 
     t = Table(rows, [4.25 * inch, 1.25 * inch, 1 * inch])
     t.setStyle(TableStyle([('ALIGNMENT', (1, 0), (-1, -1), 'RIGHT'),
-                           ('INNERGRID', (0, 0), (-1, -1), 0.25, colors.black),
+                           ('INNERGRID', (0, 0), (-1, -1), 0.25, colors.grey),
+                           ('LINEABOVE', (0, -1), (-1, -1), 1.0, colors.black),
                            ('FONT', (0, -1), (-1, -1), 'Helvetica-BoldOblique')]))
     elements.append(t)
 

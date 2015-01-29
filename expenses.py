@@ -197,6 +197,7 @@ print('Writing report to %s ...' % (args.output, ))
 styles = getSampleStyleSheet()
 
 doc = SimpleDocTemplate(args.output, pagesize=letter)
+doc.bottomMargin = 0.85 * inch
 elements = []
 
 header = Paragraph('Transactions', styles['Heading1'])

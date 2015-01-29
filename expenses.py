@@ -133,7 +133,11 @@ for date, num, split in data:
             local))
 
         other_name = other_name.split('.')
-        cat = other_name[1]
+        if len(other_name) > 1:
+            cat = other_name[1]
+        else:
+            cat = 'Dining'  # FIXME: Split handling
+
         acc = other_name[-1]
         expenses[cat].append((acc, local, foreign))
     else:

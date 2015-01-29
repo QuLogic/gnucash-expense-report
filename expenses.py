@@ -22,6 +22,7 @@ from gnucash.gnucash_core_c import gnc_commodity_get_nice_symbol
 
 
 TWOPLACES = Decimal(10) ** -2
+SIXPLACES = Decimal(10) ** -6
 # We should be able to get this from GnuCash, but I don't want to implement
 # some full currency calculation.
 FOREIGN = 'US$'
@@ -150,7 +151,7 @@ print()
 if not args.output:
     exit()
 
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Table, TableStyle
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import inch, letter
 from reportlab.lib.styles import getSampleStyleSheet
@@ -165,6 +166,10 @@ elements = []
 header = Paragraph('Transactions', styles['Heading1'])
 elements.append(header)
 
+balance = Decimal(0)
+rows = [['Date', 'Description', 'Credit', 'Debit', 'Balance']]
+ts = TableStyle([('ALIGNMENT', (2, 0), (-1, -1), 'RIGHT'),
+                 ('LINEBELOW', (0, 0), (-1, 0), 1.0, colors.grey)])
 data = sorted(set(data))  # FIXME: Splits are not unique, unfortunately.
 for date, num, split in data:
     trans = split.parent
@@ -172,32 +177,52 @@ for date, num, split in data:
 
     val = split.GetValue()
     price = split.GetSharePrice()
+    rate = (Decimal(price.denom()) / Decimal(price.num())).quantize(SIXPLACES)
     curr = split.account.get_currency_or_parent()
 
-    #print('%s - %s' % (date, trans.GetDescription()))
+    rows.append([date,
+                 trans.GetDescription(),
+                 None,
+                 None])
 
     if other:
-        other_name = other.account.get_full_name()
+        other_name = other.account.get_full_name().replace('.', ':')
         other_curr = other.account.get_currency_or_parent()
         foreign = other.GetValue()
+        other_val = gnc_commodity_get_nice_symbol(other_curr) + str(foreign)
         local = val.div(price, 1000, 0).neg()
-    #    print('\t%s %s%s' % (
-    #        other_name,
-    #        gnc_commodity_get_nice_symbol(other_curr),
-    #        foreign))
-    #    print('\t%s %s%s' % (
-    #        split.account.get_full_name(),
-    #        gnc_commodity_get_nice_symbol(curr),
-    #        local))
+        local_val = gnc_commodity_get_nice_symbol(curr) + str(local)
     else:
-        pass
-    #    print('\t-')
-    #    print('\t%s %s%s' % (
-    #        split.account.get_full_name(),
-    #        gnc_commodity_get_nice_symbol(curr),
-    #        val.div(price, 1000, 0).neg()))
+        other_name = '-'
+        other_val = '-'
+        local = val.div(price, 1000, 0).neg()
+        local_val = gnc_commodity_get_nice_symbol(curr) + str(local)
+        rate = 1
 
-space = Spacer(1, 2.5)
+    balance += (Decimal(local.num()) / Decimal(local.denom())).quantize(TWOPLACES)
+
+    rows.append([None,
+                 other_name,
+                 other_val])
+    rows.append([None,
+                 split.account.get_full_name().replace('.', ':') +
+                 (' @ ' + str(rate) if rate != 1 else ''),
+                 None,
+                 local_val])
+
+    rows.append([None, None, None, None, LOCAL + str(balance)])
+
+rows.append(['Grand Total', None, None, None, LOCAL + str(balance)])
+ts.add('LINEABOVE', (0, -1), (-1, -1), 1.0, colors.black)
+ts.add('FONT', (0, -1), (-1, -1), 'Helvetica-BoldOblique')
+
+t = Table(rows,
+          [1 * inch, 3.25 * inch, 0.75 * inch, 0.75 * inch, 0.75 * inch],
+          repeatRows=1)
+t.setStyle(ts)
+elements.append(t)
+
+space = PageBreak()
 elements.append(space)
 
 header = Paragraph('Expenses', styles['Heading1'])
